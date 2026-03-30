@@ -61,6 +61,7 @@ ANALYSIS_SR = 22050
 def get_beat_times(y_mono, sr):
     tempo, beat_frames = librosa.beat.beat_track(y=y_mono, sr=sr, hop_length=512)
     beat_times = librosa.frames_to_time(beat_frames, sr=sr, hop_length=512)
+    tempo = np.atleast_1d(tempo)[0]
     return float(tempo), beat_times
 
 def snap_to_beat(time_sec, beat_times):
@@ -162,7 +163,7 @@ def merge_tracks(y_a, y_b, y_a_mono, y_b_mono,
 # UI
 # ═══════════════════════════════════════════════════════
 
-st.title("🎚️ Mixr — Smart Audio Merger")
+st.title(" Mixr — Smart Audio Merger")
 st.caption("Upload two songs · Analyse energy · Get one seamless beat-aligned track.")
 st.divider()
 
