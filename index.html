@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mixr — Seamless Song Merger</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0a0a0f;
+    --surface: #111118;
+    --card:    #16161f;
+    --border:  #252530;
+    --a:       #4ecba0;
+    --b:       #e06050;
+    --accent:  #7b6cff;
+    --text:    #e0e0e8;
+    --muted:   #55556a;
+    --radius:  12px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px 100px;
+  }
+
+  header { text-align: center; margin-bottom: 44px; }
+  header h1 {
+    font-family: 'Space Mono', monospace;
+    font-size: 2.6rem;
+    letter-spacing: -1px;
+  }
+  header h1 span { color: var(--a); }
+  header p { margin-top: 8px; color: var(--muted); font-size: 0.9rem; font-weight: 300; }
+
+  .main { width: 100%; max-width: 920px; display: flex; flex-direction: column; gap: 20px; }
+
+  /* ── Cards ── */
+  .track-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .track-card.a { border-left: 3px solid var(--a); }
+  .track-card.b { border-left: 3px solid var(--b); }
+
+  .track-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .deck-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 4px;
+    letter-spacing: 1px;
+  }
+  .a .deck-badge { background: rgba(78,203,160,.15); color: var(--a); }
+  .b .deck-badge { background: rgba(224,96,80,.15);  color: var(--b); }
+
+  .track-name { font-size: 0.85rem; color: var(--muted); }
+  .track-name.loaded { color: var(--text); }
+
+  .bpm-badge {
+    margin-left: auto;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    padding: 3px 10px;
+    border-radius: 4px;
+    background: rgba(123,108,255,.15);
+    color: var(--accent);
+    display: none;
+  }
+  .bpm-badge.visible { display: inline-block; }
+
+  /* ── Dropzone ── */
+  .dropzone {
+    border: 1.5px dashed var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    position: relative;
+  }
+  .dropzone:hover, .dropzone.drag-over { border-color: var(--a); background: rgba(78,203,160,.04); }
+  .b .dropzone:hover, .b .dropzone.drag-over { border-color: var(--b); background: rgba(224,96,80,.04); }
+  .dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .dropzone-icon { font-size: 1.4rem; margin-bottom: 6px; }
+  .dropzone-text { font-size: 0.82rem; color: var(--muted); }
+  .dropzone-text strong { color: var(--text); font-weight: 500; }
+
+  /* ── Waveform ── */
+  .waveform-wrap { display: none; flex-direction: column; gap: 10px; }
+  .waveform-wrap.visible { display: flex; }
+
+  .canvas-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    letter-spacing: .5px;
+    margin-bottom: -6px;
+  }
+
+  canvas { width: 100%; display: block; border-radius: 6px; cursor: crosshair; }
+  canvas.waveform { height: 70px; }
+  canvas.energy   { height: 48px; }
+
+  .wave-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .time-disp {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    min-width: 110px;
+  }
+
+  /* ── Suggestion pill ── */
+  .suggestion {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    background: rgba(123,108,255,.1);
+    border: 1px solid rgba(123,108,255,.3);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+  }
+  .suggestion.visible { display: flex; }
+  .suggestion-icon { font-size: 1rem; }
+  .suggestion-text { color: var(--text); flex: 1; }
+  .suggestion-text span { color: var(--accent); font-family: 'Space Mono', monospace; }
+  .accept-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 0.75rem;
+    font-family: 'Space Mono', monospace;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  .accept-btn:hover { opacity: .85; }
+
+  /* ── Buttons ── */
+  .btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 6px 14px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    font-family: 'Space Mono', monospace;
+    transition: border-color .15s, color .15s;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--a); color: var(--a); }
+  .b .btn:hover { border-color: var(--b); color: var(--b); }
+
+  .start-label { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
+  .start-label span { font-family: 'Space Mono', monospace; color: var(--text); }
+
+  /* ── Analyze button ── */
+  .analyze-btn {
+    width: 100%;
+    padding: 14px;
+    background: none;
+    color: var(--accent);
+    border: 1.5px solid var(--accent);
+    border-radius: var(--radius);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .analyze-btn:hover { background: rgba(123,108,255,.1); }
+  .analyze-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+  /* ── Fade row ── */
+  .fade-row {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .fade-row label { font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
+  .fade-row input[type=range] { flex: 1; accent-color: var(--a); min-width: 120px; }
+  .fade-value { font-family: 'Space Mono', monospace; font-size: 0.82rem; color: var(--text); min-width: 44px; text-align: right; }
+
+  .snap-row { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--muted); }
+  .snap-row input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+  .snap-row strong { color: var(--accent); }
+
+  /* ── Crossfade diagram ── */
+  .diagram { display: flex; height: 24px; border-radius: 6px; overflow: hidden; }
+  .seg-a    { background: var(--a); flex: 1; opacity: .6; }
+  .seg-fade { width: 80px; background: linear-gradient(to right, var(--a), var(--b)); opacity: .85; flex-shrink: 0; }
+  .seg-b    { background: var(--b); flex: 1; opacity: .6; }
+  .diagram-label { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 4px; }
+
+  /* ── Merge btn ── */
+  .merge-btn {
+    width: 100%;
+    padding: 16px;
+    background: var(--a);
+    color: #0a0a0f;
+    border: none;
+    border-radius: var(--radius);
+    font-family: 'Space Mono', monospace;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s;
+  }
+  .merge-btn:hover { opacity: .9; transform: translateY(-1px); }
+  .merge-btn:disabled { opacity: .3; cursor: not-allowed; transform: none; }
+
+  /* ── Status ── */
+  .status { text-align: center; font-size: 0.82rem; color: var(--muted); min-height: 18px; font-family: 'Space Mono', monospace; }
+  .status.error   { color: var(--b); }
+  .status.success { color: var(--a); }
+
+  /* ── Result ── */
+  .result-card { display: none; background: var(--card); border: 1px solid var(--a); border-radius: var(--radius); padding: 22px; flex-direction: column; gap: 12px; text-align: center; }
+  .result-card.visible { display: flex; }
+  .result-card h3 { font-family: 'Space Mono', monospace; font-size: 0.85rem; color: var(--a); letter-spacing: 1px; }
+  .result-card audio { width: 100%; }
+  .download-btn { display: inline-block; padding: 9px 24px; border: 1px solid var(--a); border-radius: 8px; color: var(--a); font-family: 'Space Mono', monospace; font-size: 0.78rem; text-decoration: none; transition: background .15s; }
+  .download-btn:hover { background: rgba(78,203,160,.1); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Mix<span>r</span></h1>
+  <p>Upload two songs · Analyse energy · Get one seamless beat-aligned track.</p>
+</header>
+
+<div class="main">
+
+  <!-- Track A -->
+  <div class="track-card a" id="card-a">
+    <div class="track-header">
+      <span class="deck-badge">TRACK A</span>
+      <span class="track-name" id="name-a">No file selected</span>
+      <span class="bpm-badge" id="bpm-a"></span>
+    </div>
+    <div class="dropzone" id="drop-a">
+      <input type="file" id="file-a" accept="audio/*">
+      <div class="dropzone-icon">🎵</div>
+      <div class="dropzone-text"><strong>Click to upload</strong> or drag &amp; drop · MP3, WAV, FLAC</div>
+    </div>
+    <div class="waveform-wrap" id="wave-wrap-a">
+      <div class="canvas-label">WAVEFORM — click to set start point</div>
+      <canvas class="waveform" id="wave-a" height="70"></canvas>
+      <div class="canvas-label">ENERGY CURVE — fade-out suggestion shown in purple</div>
+      <canvas class="energy" id="energy-a" height="48"></canvas>
+      <div class="wave-controls">
+        <button class="btn" id="play-a">▶ PREVIEW</button>
+        <span class="time-disp" id="time-a">0:00 / 0:00</span>
+        <span class="start-label">Start: <span id="start-disp-a">0.0s</span></span>
+      </div>
+      <div class="suggestion" id="sug-a">
+        <span class="suggestion-icon">🎯</span>
+        <span class="suggestion-text">Suggested fade-out at <span id="sug-a-val">—</span></span>
+        <button class="accept-btn" onclick="acceptSuggestion('a')">Use this</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Track B -->
+  <div class="track-card b" id="card-b">
+    <div class="track-header">
+      <span class="deck-badge">TRACK B</span>
+      <span class="track-name" id="name-b">No file selected</span>
+      <span class="bpm-badge" id="bpm-b"></span>
+    </div>
+    <div class="dropzone" id="drop-b">
+      <input type="file" id="file-b" accept="audio/*">
+      <div class="dropzone-icon">🎶</div>
+      <div class="dropzone-text"><strong>Click to upload</strong> or drag &amp; drop · MP3, WAV, FLAC</div>
+    </div>
+    <div class="waveform-wrap" id="wave-wrap-b">
+      <div class="canvas-label">WAVEFORM — click to set start point</div>
+      <canvas class="waveform" id="wave-b" height="70"></canvas>
+      <div class="canvas-label">ENERGY CURVE — fade-in suggestion shown in purple</div>
+      <canvas class="energy" id="energy-b" height="48"></canvas>
+      <div class="wave-controls">
+        <button class="btn" id="play-b">▶ PREVIEW</button>
+        <span class="time-disp" id="time-b">0:00 / 0:00</span>
+        <span class="start-label">Start: <span id="start-disp-b">0.0s</span></span>
+      </div>
+      <div class="suggestion" id="sug-b">
+        <span class="suggestion-icon">🎯</span>
+        <span class="suggestion-text">Suggested fade-in at <span id="sug-b-val">—</span></span>
+        <button class="accept-btn" onclick="acceptSuggestion('b')">Use this</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analyse -->
+  <button class="analyze-btn" id="analyze-btn" disabled>⚡ ANALYSE TRACKS</button>
+
+  <!-- Fade controls -->
+  <div class="fade-row">
+    <label>Crossfade</label>
+    <input type="range" id="fade-slider" min="1" max="30" step="0.5" value="5">
+    <span class="fade-value" id="fade-val">5.0s</span>
+    <div class="snap-row">
+      <input type="checkbox" id="snap-cb" checked>
+      <label for="snap-cb">Snap to <strong>beat</strong></label>
+    </div>
+  </div>
+
+  <!-- Crossfade diagram -->
+  <div style="padding: 0 2px;">
+    <div class="diagram">
+      <div class="seg-a"></div>
+      <div class="seg-fade" id="seg-fade"></div>
+      <div class="seg-b"></div>
+    </div>
+    <div class="diagram-label">
+      <span>Track A body</span><span>↔ crossfade</span><span>Track B body</span>
+    </div>
+  </div>
+
+  <button class="merge-btn" id="merge-btn" disabled>MERGE TRACKS</button>
+  <div class="status" id="status"></div>
+
+  <div class="result-card" id="result-card">
+    <h3>✓ MERGED SUCCESSFULLY</h3>
+    <audio id="result-audio" controls></audio>
+    <a class="download-btn" id="download-link" download="mixr_merged.wav">↓ DOWNLOAD .WAV</a>
+  </div>
+
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────
+const S = {
+  a: { file: null, audioEl: null, buffer: null, startSec: 0, fadeSec: null, duration: 0, beatTimes: [], energyT: [], energyV: [] },
+  b: { file: null, audioEl: null, buffer: null, startSec: 0, fadeSec: null, duration: 0, beatTimes: [], energyT: [], energyV: [] },
+};
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const playing = { a: false, b: false };
+
+function fmt(s) {
+  const m = Math.floor(s/60), ss = Math.floor(s%60).toString().padStart(2,'0');
+  return `${m}:${ss}`;
+}
+function setStatus(msg, type='') {
+  const el = document.getElementById('status');
+  el.textContent = msg; el.className = 'status ' + type;
+}
+function checkReady() {
+  const both = S.a.file && S.b.file;
+  document.getElementById('analyze-btn').disabled = !both;
+  document.getElementById('merge-btn').disabled   = !both;
+}
+
+// ── Waveform drawing ──────────────────────────────────
+function drawWaveform(id, buffer, playFrac, accent, startFrac, beatTimes) {
+  const canvas = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = canvas.offsetWidth * dpr;
+  canvas.height = 70 * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = canvas.offsetWidth, H = 70, cy = H/2;
+
+  ctx.fillStyle = '#12121a'; ctx.fillRect(0,0,W,H);
+
+  const data = buffer.getChannelData(0);
+  const step = Math.max(1, Math.floor(data.length / W));
+
+  for (let i = 0; i < W; i++) {
+    let mx = 0;
+    for (let j = 0; j < step; j++) { const v = Math.abs(data[i*step+j]||0); if(v>mx) mx=v; }
+    const bh = Math.max(1, mx*(cy-4));
+    ctx.strokeStyle = (i/W < startFrac) ? '#222232' : accent + '99';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(i, cy-bh); ctx.lineTo(i, cy+bh); ctx.stroke();
+  }
+
+  // Beat tick marks
+  if (beatTimes && beatTimes.length && buffer.duration > 0) {
+    ctx.strokeStyle = accent + '40';
+    ctx.lineWidth = 0.5;
+    beatTimes.forEach(bt => {
+      const x = (bt / buffer.duration) * W;
+      ctx.beginPath(); ctx.moveTo(x, cy-6); ctx.lineTo(x, cy+6); ctx.stroke();
+    });
+  }
+
+  // Start marker
+  const sx = startFrac * W;
+  ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(sx,2); ctx.lineTo(sx,H-2); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Playhead
+  const px = playFrac * W;
+  ctx.strokeStyle = '#ffffff60'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(px,0); ctx.lineTo(px,H); ctx.stroke();
+}
+
+// ── Energy curve drawing ──────────────────────────────
+function drawEnergy(id, times, values, duration, suggestedSec, accent) {
+  const canvas = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = canvas.offsetWidth * dpr;
+  canvas.height = 48 * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = canvas.offsetWidth, H = 48;
+
+  ctx.fillStyle = '#0e0e16'; ctx.fillRect(0,0,W,H);
+
+  if (!times || times.length === 0) return;
+
+  // Energy line
+  ctx.beginPath();
+  ctx.strokeStyle = accent + 'bb';
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < times.length; i++) {
+    const x = (times[i] / duration) * W;
+    const y = H - values[i] * (H - 6) - 3;
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // Fill under curve
+  ctx.beginPath();
+  for (let i = 0; i < times.length; i++) {
+    const x = (times[i] / duration) * W;
+    const y = H - values[i] * (H-6) - 3;
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  ctx.fillStyle = accent + '20'; ctx.fill();
+
+  // Suggested point marker
+  if (suggestedSec !== null && duration > 0) {
+    const sx = (suggestedSec / duration) * W;
+    ctx.strokeStyle = '#7b6cff';
+    ctx.lineWidth = 2; ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(sx,0); ctx.lineTo(sx,H); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#7b6cff';
+    ctx.beginPath(); ctx.arc(sx, 6, 4, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+// ── Load file ─────────────────────────────────────────
+async function loadFile(deck, file) {
+  const s = S[deck];
+  s.file = file; s.startSec = 0; s.fadeSec = null;
+
+  const ab = await file.arrayBuffer();
+  s.buffer = await audioCtx.decodeAudioData(ab.slice(0));
+  s.duration = s.buffer.duration;
+
+  s.audioEl = new Audio(URL.createObjectURL(file));
+  s.audioEl.addEventListener('timeupdate', () => updateTime(deck));
+  s.audioEl.addEventListener('ended', () => {
+    playing[deck] = false;
+    document.getElementById(`play-${deck}`).textContent = '▶ PREVIEW';
+  });
+
+  document.getElementById(`name-${deck}`).textContent = file.name;
+  document.getElementById(`name-${deck}`).classList.add('loaded');
+  document.getElementById(`wave-wrap-${deck}`).classList.add('visible');
+
+  const accent = deck === 'a' ? '#4ecba0' : '#e06050';
+  drawWaveform(`wave-${deck}`, s.buffer, 0, accent, 0, []);
+  drawEnergy(`energy-${deck}`, [], [], s.duration, null, accent);
+
+  // Click waveform → set start point
+  document.getElementById(`wave-${deck}`).onclick = e => {
+    const rect = e.target.getBoundingClientRect();
+    const frac = (e.clientX - rect.left) / rect.width;
+    s.startSec = frac * s.duration;
+    s.audioEl.currentTime = s.startSec;
+    document.getElementById(`start-disp-${deck}`).textContent = s.startSec.toFixed(1)+'s';
+    drawWaveform(`wave-${deck}`, s.buffer, frac, accent, frac, s.beatTimes);
+    drawEnergy(`energy-${deck}`, s.energyT, s.energyV, s.duration, s.fadeSec, accent);
+  };
+
+  // Click energy canvas → set fade point
+  document.getElementById(`energy-${deck}`).onclick = e => {
+    const rect = e.target.getBoundingClientRect();
+    const frac = (e.clientX - rect.left) / rect.width;
+    s.fadeSec = frac * s.duration;
+    const accent2 = deck === 'a' ? '#4ecba0' : '#e06050';
+    drawEnergy(`energy-${deck}`, s.energyT, s.energyV, s.duration, s.fadeSec, accent2);
+    if (deck === 'a') document.getElementById('sug-a-val').textContent = s.fadeSec.toFixed(1)+'s (manual)';
+    else document.getElementById('sug-b-val').textContent = s.fadeSec.toFixed(1)+'s (manual)';
+  };
+
+  checkReady();
+}
+
+function updateTime(deck) {
+  const s = S[deck];
+  if (!s.audioEl || !s.buffer) return;
+  const cur = s.audioEl.currentTime;
+  document.getElementById(`time-${deck}`).textContent = `${fmt(cur)} / ${fmt(s.duration)}`;
+  const accent = deck === 'a' ? '#4ecba0' : '#e06050';
+  const sf = s.startSec / s.duration;
+  drawWaveform(`wave-${deck}`, s.buffer, cur/s.duration, accent, sf, s.beatTimes);
+}
+
+function togglePlay(deck) {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const s = S[deck];
+  const btn = document.getElementById(`play-${deck}`);
+  if (playing[deck]) {
+    s.audioEl.pause(); playing[deck] = false; btn.textContent = '▶ PREVIEW';
+  } else {
+    s.audioEl.currentTime = s.startSec;
+    s.audioEl.play(); playing[deck] = true; btn.textContent = '❚❚ PAUSE';
+  }
+}
+document.getElementById('play-a').onclick = () => togglePlay('a');
+document.getElementById('play-b').onclick = () => togglePlay('b');
+
+// ── Suggestion accept ─────────────────────────────────
+function acceptSuggestion(deck) {
+  const s = S[deck];
+  const sugSec = deck === 'a'
+    ? parseFloat(document.getElementById('sug-a-val').textContent)
+    : parseFloat(document.getElementById('sug-b-val').textContent);
+  if (!isNaN(sugSec)) {
+    s.fadeSec = sugSec;
+    const accent = deck === 'a' ? '#4ecba0' : '#e06050';
+    drawEnergy(`energy-${deck}`, s.energyT, s.energyV, s.duration, s.fadeSec, accent);
+  }
+}
+
+// ── Analyse ───────────────────────────────────────────
+document.getElementById('analyze-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true; btn.textContent = '⚡ ANALYSING...';
+  setStatus('Detecting BPM and energy curves...', '');
+
+  const fd = new FormData();
+  fd.append('track_a', S.a.file);
+  fd.append('track_b', S.b.file);
+  fd.append('start_a', S.a.startSec.toFixed(2));
+  fd.append('start_b', S.b.startSec.toFixed(2));
+
+  try {
+    const res  = await fetch('/analyze', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    // Track A
+    const ta = data.track_a;
+    S.a.beatTimes = ta.beat_times;
+    S.a.energyT   = ta.energy_times;
+    S.a.energyV   = ta.energy_values;
+    S.a.fadeSec   = ta.suggested_fade_out;
+
+    document.getElementById('bpm-a').textContent = ta.bpm + ' BPM';
+    document.getElementById('bpm-a').classList.add('visible');
+    document.getElementById('sug-a-val').textContent = ta.suggested_fade_out.toFixed(1) + 's';
+    document.getElementById('sug-a').classList.add('visible');
+    drawWaveform('wave-a', S.a.buffer, S.a.audioEl.currentTime/S.a.duration, '#4ecba0', S.a.startSec/S.a.duration, S.a.beatTimes);
+    drawEnergy('energy-a', S.a.energyT, S.a.energyV, S.a.duration, S.a.fadeSec, '#4ecba0');
+
+    // Track B
+    const tb = data.track_b;
+    S.b.beatTimes = tb.beat_times;
+    S.b.energyT   = tb.energy_times;
+    S.b.energyV   = tb.energy_values;
+    S.b.fadeSec   = tb.suggested_fade_in;
+
+    document.getElementById('bpm-b').textContent = tb.bpm + ' BPM';
+    document.getElementById('bpm-b').classList.add('visible');
+    document.getElementById('sug-b-val').textContent = tb.suggested_fade_in.toFixed(1) + 's';
+    document.getElementById('sug-b').classList.add('visible');
+    drawWaveform('wave-b', S.b.buffer, S.b.audioEl.currentTime/S.b.duration, '#e06050', S.b.startSec/S.b.duration, S.b.beatTimes);
+    drawEnergy('energy-b', S.b.energyT, S.b.energyV, S.b.duration, S.b.fadeSec, '#e06050');
+
+    setStatus('Analysis complete — suggestions shown in purple on energy curves.', 'success');
+  } catch(e) {
+    setStatus('Analysis error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '⚡ ANALYSE TRACKS';
+  }
+});
+
+// ── Fade slider ───────────────────────────────────────
+document.getElementById('fade-slider').addEventListener('input', function() {
+  document.getElementById('fade-val').textContent = parseFloat(this.value).toFixed(1)+'s';
+  document.getElementById('seg-fade').style.width = Math.max(40, this.value/30*160)+'px';
+});
+
+// ── Drag & drop + file input ──────────────────────────
+['a','b'].forEach(deck => {
+  const drop  = document.getElementById(`drop-${deck}`);
+  const input = document.getElementById(`file-${deck}`);
+  input.addEventListener('change', e => { if(e.target.files[0]) loadFile(deck, e.target.files[0]); });
+  drop.addEventListener('dragover',  e => { e.preventDefault(); drop.classList.add('drag-over'); });
+  drop.addEventListener('dragleave', ()=> drop.classList.remove('drag-over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('drag-over');
+    if(e.dataTransfer.files[0]) loadFile(deck, e.dataTransfer.files[0]);
+  });
+});
+
+// ── Merge ─────────────────────────────────────────────
+document.getElementById('merge-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('merge-btn');
+  btn.disabled = true; btn.textContent = 'MERGING...';
+  setStatus('Processing audio...', '');
+
+  const fd = new FormData();
+  fd.append('track_a', S.a.file);
+  fd.append('track_b', S.b.file);
+  fd.append('fade_duration', document.getElementById('fade-slider').value);
+  fd.append('start_a', S.a.startSec.toFixed(2));
+  fd.append('start_b', S.b.startSec.toFixed(2));
+  fd.append('snap_to_beat', document.getElementById('snap-cb').checked ? 'true' : 'false');
+  if (S.a.fadeSec !== null) fd.append('fade_start_a', S.a.fadeSec.toFixed(2));
+  if (S.b.fadeSec !== null) fd.append('fade_start_b', S.b.fadeSec.toFixed(2));
+
+  try {
+    const res = await fetch('/merge', { method: 'POST', body: fd });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error||'Server error'); }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    document.getElementById('result-audio').src = url;
+    document.getElementById('download-link').href = url;
+    document.getElementById('result-card').classList.add('visible');
+    setStatus('', '');
+  } catch(e) {
+    setStatus('Error: '+e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'MERGE TRACKS';
+  }
+});
+</script>
+</body>
+</html>
